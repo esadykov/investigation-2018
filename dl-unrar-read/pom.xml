@@ -15,12 +15,12 @@
         <dependency>
             <groupId>com.github.junrar</groupId>
             <artifactId>junrar</artifactId>
-            <version>3.1.0</version>
+            <version>4.0.1-SNAPSHOT</version>
         </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>1.7.25</version>
+         <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.2.3</version>
         </dependency>
     </dependencies>
 

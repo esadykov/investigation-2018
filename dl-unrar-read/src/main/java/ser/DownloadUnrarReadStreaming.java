@@ -1,124 +1,105 @@
 package ser;
 
 import com.github.junrar.Archive;
-import com.github.junrar.ExtractDestination;
-import com.github.junrar.Junrar;
-import com.github.junrar.LocalFolderExtractor;
 import com.github.junrar.exception.RarException;
-import com.github.junrar.rarfile.FileHeader;
-import org.apache.commons.logging.Log;
+import com.github.junrar.impl.InputStreamVolumeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class DownloadUnrarReadStreaming {
     private static final Logger logger = LoggerFactory.getLogger(DownloadUnrarReadStreaming.class);
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void main(String[] args) throws Exception {
 
-        String FILE_NAME = "downloaded.rar";
         String DIST_FOLDER = "unpacked";
-        long EXPECTED_FILE_SIZE = 18044431L;
-        URL DOWNLOAD_FROM = new URL("http://data.nalog.ru/Public/Downloads/20190506/fias_delta_xml.rar");
+//        URL DOWNLOAD_FROM = new URL("http://data.nalog.ru/Public/Downloads/20190506/fias_delta_xml.rar");
+//        URL DOWNLOAD_FROM = new URL("http://data.nalog.ru/Public/Downloads/20190506/fias_xml.rar");
+        URL DOWNLOAD_FROM = new URL("https://data.nalog.ru/Public/Downloads/20191021/fias_xml.rar");
+//        File DOWNLOAD_FROM = new File("C:\\my\\investigation-2018\\unpacked\\12unpacked.rar");
+//        File DOWNLOAD_FROM = new File("C:\\Users\\esadykov\\Downloads\\fias_delta_xml.rar");
 
-/*        ReadableByteChannel readableByteChannel = Channels.newChannel(DOWNLOAD_FROM.openStream());
-
-        FileOutputStream fileOutputStream = new FileOutputStream(FILE_NAME);
-
-        logger.info("start download");
-        fileOutputStream.getChannel().transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-        logger.info("finish download");
-
-        Path filePath = Paths.get(FILE_NAME);
-        FileChannel imageFileChannel = FileChannel.open(filePath);
-
-        long actualFileSize = imageFileChannel.size();
-        if (actualFileSize != EXPECTED_FILE_SIZE)
-            throw new Exception("Incorrect file size: " + actualFileSize);
-        else
-            logger.info("file size is correct: {}", actualFileSize);
-*/
 
         File destinationFolder = new File(DIST_FOLDER);
         if (!destinationFolder.exists()) {
             logger.info("create unpacked folder: {}", destinationFolder.mkdir());
         }
-        Junrar.extract(DOWNLOAD_FROM.openStream(), destinationFolder);
 
-        //Junrar.validateDestinationPath(destinationFolder);
-
-        final Archive arch;
-
+        final ExecutorService executor = Executors.newFixedThreadPool(6);
         try {
-            arch = new Archive(DOWNLOAD_FROM.openStream());
-        } catch (final Exception e) {
-            logger.error("Error on create Archive", e);
-            throw e;
-        }
-
-        LocalFolderExtractor lfe = new LocalFolderExtractor(destinationFolder);
-
-
-        if (arch.isEncrypted()) {
-            logger.warn("archive is encrypted cannot extract");
-            arch.close();
-            return;
-        }
-
-        final List<File> extractedFiles = new ArrayList<File>();
-        try{
-            for(final FileHeader fh : arch ) {
+            InputStream fis = null;
+            while (fis == null) {
                 try {
-                    final File file = tryToExtract(lfe, arch, fh);
-                    if (file != null) {
-                        extractedFiles.add(file);
-                    }
-                } catch (final IOException e) {
-                    logger.error("error extracting the file", e);
-                    throw e;
-                } catch (final RarException e) {
-                    logger.error("error extraction the file", e);
-                    throw e;
+                    fis = DOWNLOAD_FROM.openStream();
+                } catch (IOException e) {
+                    logger.error(e.getMessage());
                 }
             }
-        }finally {
-            arch.close();
-        }
-        logger.info("extracted files: {}", extractedFiles);
+            final InputStream is = fis;
+            try {
+                logger.info("new archive wrapper begin");
 
-        logger.info("delete unpacked: {}", deleteFolder(destinationFolder));
-    }
+                Archive newArchive = new Archive(new InputStreamVolumeManager(is/*new FileInputStream(fiasFile*/), null,
+                        (fileHeader, archive) -> {
+                            if (fileHeader.getFileNameString() == null)
+                                return;
 
+                            try {
+                                logger.info("new file handler {} begin", fileHeader.getFileNameString());
+                                final File file = new File(DIST_FOLDER, fileHeader.getFileNameString());
+                                try {
+                                    if (file.exists())
+                                        file.delete();
+                                    file.createNewFile();
+                                } catch (IOException e) {
+                                    logger.error("can not create file {}", file.getAbsolutePath(), e);
+                                }
+                                /*
+                                try {
+                                    executor.execute(() -> {
+                                        logger.info("begin read file {} expected size {}", fileHeader.getFileNameString(), fileHeader.getFullUnpackSize());
+                                        try {
+                                            long size = 0;
+                                            long prevSize;
+                                            do {
+                                                prevSize = size;
+                                                size = file.length();
+                                                if (size - prevSize > 10 * 1024 * 1024)
+                                                    logger.info("current file size of {} is {} mb", fileHeader.getFileNameString(), size / (1024 * 1024));
+                                                TimeUnit.SECONDS.sleep(1);
+                                            } while (size < fileHeader.getFullUnpackSize());
+                                            logger.info("full file size of {} is {} and expected size {}", fileHeader.getFileNameString(), size, fileHeader.getFullUnpackSize());
 
-    private static File tryToExtract(
-            final ExtractDestination destination,
-            final Archive arch,
-            final FileHeader fileHeader
-    ) throws IOException, RarException {
-        final String fileNameString = fileHeader.getFileNameString();
-        if (fileHeader.isEncrypted()) {
-            logger.warn("file is encrypted cannot extract: "+ fileNameString);
-            return null;
-        }
-        logger.info("extracting: " + fileNameString);
-        if (fileHeader.isDirectory()) {
-            return destination.createDirectory(fileHeader);
-        } else {
-            return destination.extract(arch, fileHeader);
-        }
-    }
+                                        } catch (Exception e) {
+                                            logger.error("can not read unpacked file {}", file.getAbsolutePath(), e);
+                                            throw new RuntimeException(e);
+                                        }
+                                    });
+                                } catch (Exception e) {
+                                    logger.error("error on run executor", e);
+                                    throw e;
+                                }
+                                */
+                                logger.info("extract {} begin", fileHeader.getFileNameString());
+                                archive.extractFile(fileHeader, new FileOutputStream(file, false));
+                                logger.info("extract {} end", fileHeader.getFileNameString());
+                            } catch (RarException | FileNotFoundException e) {
+                                logger.error("error on download stream extract", e);
+                            }
+                        });
 
-    private static boolean deleteFolder(File directoryToBeDeleted) {
-        File[] allContents = directoryToBeDeleted.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                deleteFolder(file);
+                logger.info("archive contains {} file headers", newArchive.getFileHeaders().size());
+            } catch (Exception e) {
+                logger.error("error on new Archive", e);
             }
+
+        } finally {
+            executor.shutdown();
         }
-        return directoryToBeDeleted.delete();
     }
 }
