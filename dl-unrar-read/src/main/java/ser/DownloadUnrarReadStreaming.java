@@ -10,6 +10,7 @@ import java.io.*;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class DownloadUnrarReadStreaming {
     private static final Logger logger = LoggerFactory.getLogger(DownloadUnrarReadStreaming.class);
@@ -59,35 +60,36 @@ public class DownloadUnrarReadStreaming {
                                 } catch (IOException e) {
                                     logger.error("can not create file {}", file.getAbsolutePath(), e);
                                 }
-                                /*
+
                                 try {
                                     executor.execute(() -> {
-                                        logger.info("begin read file {} expected size {}", fileHeader.getFileNameString(), fileHeader.getFullUnpackSize());
                                         try {
-                                            long size = 0;
-                                            long prevSize;
+                                            FileInputStream fileInputStream = new FileInputStream(file);
+                                            int b;
+                                            int cnt = 0;
                                             do {
-                                                prevSize = size;
-                                                size = file.length();
-                                                if (size - prevSize > 10 * 1024 * 1024)
-                                                    logger.info("current file size of {} is {} mb", fileHeader.getFileNameString(), size / (1024 * 1024));
-                                                TimeUnit.SECONDS.sleep(1);
-                                            } while (size < fileHeader.getFullUnpackSize());
-                                            logger.info("full file size of {} is {} and expected size {}", fileHeader.getFileNameString(), size, fileHeader.getFullUnpackSize());
-
+                                                b = fileInputStream.read();
+                                                if (b != -1) {
+                                                    cnt++;
+                                                    if (cnt % 1024 == 0) {
+                                                        logger.info("file {} read {} kb", fileHeader.getFileNameString(), cnt / 1024);
+                                                    }
+                                                } else {
+                                                    TimeUnit.SECONDS.sleep(1);
+                                                }
+                                            } while (cnt < fileHeader.getFullUnpackSize());
+                                            logger.info("file {} read complete", fileHeader.getFileNameString());
                                         } catch (Exception e) {
-                                            logger.error("can not read unpacked file {}", file.getAbsolutePath(), e);
-                                            throw new RuntimeException(e);
+                                            logger.error("extracting file error", e);
                                         }
                                     });
                                 } catch (Exception e) {
                                     logger.error("error on run executor", e);
                                     throw e;
                                 }
-                                */
+
                                 logger.info("extract {} begin", fileHeader.getFileNameString());
                                 archive.extractFile(fileHeader, new FileOutputStream(file, false));
-                                logger.info("extract {} end", fileHeader.getFileNameString());
                             } catch (RarException | FileNotFoundException e) {
                                 logger.error("error on download stream extract", e);
                             }

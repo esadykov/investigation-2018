@@ -11,6 +11,7 @@
         <module>jwt</module>
         <module>dl-unrar-read</module>
         <module>pidigit</module>
+        <module>mail</module>
     </modules>
     <packaging>pom</packaging>
     <name>investigation-2018</name>
